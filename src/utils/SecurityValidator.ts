@@ -14,7 +14,7 @@ export class SecurityValidator {
       return false;
     }
     
-    if (!SECURITY_CONFIG.FILENAME_REGEX.test(filename)) {
+    if (!SECURITY_CONFIG.STRICT_FILENAME_REGEX.test(filename)) {
       return false;
     }
 
@@ -77,6 +77,10 @@ export class SecurityValidator {
     }
     
     if (accept && accept.length > 1000) {
+      return false;
+    }
+    
+    if (req.url && req.url.length > 2048) {
       return false;
     }
     

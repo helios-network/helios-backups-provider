@@ -26,8 +26,12 @@ export class DaemonManager {
         env: { 
           ...process.env, 
           NODE_ENV: 'production',
-          HELIOS_DAEMON: 'true'
-        }
+          HELIOS_DAEMON: 'true',
+          NODE_OPTIONS: '--max-old-space-size=512',
+          UV_THREADPOOL_SIZE: '4'
+        },
+        uid: process.getuid ? process.getuid() : undefined,
+        gid: process.getgid ? process.getgid() : undefined
       });
       
       child.unref();

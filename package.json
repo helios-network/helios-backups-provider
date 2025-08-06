@@ -18,9 +18,11 @@
     "lint:fix": "eslint src/**/*.ts --fix",
     "security:audit": "npm audit",
     "security:check": "npm audit --audit-level=moderate",
+    "security:test": "node scripts/security-test.js",
+    "security:full": "npm run security:audit && npm run security:check && npm run security:test",
     "prebuild": "npm run clean",
     "postinstall": "npm run build",
-    "prepublishOnly": "npm run test && npm run lint && npm run security:check"
+    "prepublishOnly": "npm run test && npm run lint && npm run security:full"
   },
   "engines": {
     "node": ">=16.0.0",

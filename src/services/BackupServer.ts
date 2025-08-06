@@ -54,10 +54,8 @@ export class BackupServer {
   private setupRoutes(): void {
     this.app.get('/snapshots/:filename.header.json', (req, res) => {
       try {
-        console.log(`[DEBUG] Header route matched: ${req.originalUrl}`);
         const fileName = path.basename(req.params.filename);
         const headerFileName = `${fileName}.header.json`;
-        console.log(`[DEBUG] Extracted filename: ${fileName}`);
         
         if (!SecurityValidator.isValidFilename(fileName)) {
           console.warn(`[SECURITY] Invalid filename attempted: ${fileName} from ${req.ip}`);
@@ -66,14 +64,9 @@ export class BackupServer {
           });
         }
 
-        console.log(`[DEBUG] Checking extensions for: ${fileName}`);
-        console.log(`[DEBUG] Allowed extensions: ${SECURITY_CONFIG.ALLOWED_EXTENSIONS}`);
         const hasValidBackupExtension = SECURITY_CONFIG.ALLOWED_EXTENSIONS.some(ext => {
-          const endsWith = fileName.toLowerCase().endsWith(ext);
-          console.log(`[DEBUG] Checking if ${fileName} ends with ${ext}: ${endsWith}`);
-          return endsWith;
+          return fileName.toLowerCase().endsWith(ext);
         });
-        console.log(`[DEBUG] Has valid backup extension: ${hasValidBackupExtension}`);
         
         if (!hasValidBackupExtension) {
           console.warn(`[SECURITY] Invalid backup file extension attempted: ${fileName} from ${req.ip}`);
@@ -102,10 +95,10 @@ export class BackupServer {
         const blockId = this.extractBlockId(fileName);
         const uploadedAt = stats.mtime.toISOString();
         const description = this.generateDescription(fileName, blockId);
-        const downloadUrl = `http://localhost:${this.port}/snapshots/${fileName}`;
+        const downloadUrl = `${req.protocol}://${req.get('host')}/snapshots/${SecurityValidator.sanitizeFilename(fileName)}`;
 
         const headerContent = {
-          filename: fileName,
+          filename: SecurityValidator.sanitizeFilename(fileName),
           blockId: blockId,
           uploadedAt: uploadedAt,
           description: description,
@@ -256,16 +249,23 @@ export class BackupServer {
             blockId: blockId,
             uploadedAt: stats.mtime.toISOString(),
             description: this.generateDescription(file, blockId),
-            downloadUrl: `http://localhost:${this.port}/snapshots/${file}`,
-            headerUrl: `http://localhost:${this.port}/snapshots/${file}.header.json`,
+            downloadUrl: `${req.protocol}://${req.get('host')}/snapshots/${SecurityValidator.sanitizeFilename(file)}`,
+            headerUrl: `${req.protocol}://${req.get('host')}/snapshots/${SecurityValidator.sanitizeFilename(file)}.header.json`,
             fileSize: stats.size,
           };
         });
 
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.setHeader('Surrogate-Control', 'no-store');
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader('X-Frame-Options', 'DENY');
+        res.setHeader('X-XSS-Protection', '1; mode=block');
+        res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+        res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+        res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
 
         console.info(`[LIST] ${snapshots.length} snapshots listed by ${req.ip}`);
         res.json({
@@ -299,8 +299,14 @@ export class BackupServer {
     });
 
     this.app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-      console.error('[ERROR] Unhandled error:', err);
-      res.status(500).json({ error: 'Internal server error' });
+      const errorMessage = process.env.NODE_ENV === 'production' 
+        ? 'Internal server error' 
+        : err.message;
+      
+      res.status(500).json({ 
+        error: errorMessage,
+        timestamp: new Date().toISOString()
+      });
     });
   }
 
