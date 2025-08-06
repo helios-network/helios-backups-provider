@@ -320,7 +320,15 @@ export class BackupServer {
       console.log(`[INFO] Security: Rate limiting ${SECURITY_CONFIG.RATE_LIMIT.max} requests per minute`);
     });
 
+    let isShuttingDown = false;
+
     const gracefulShutdown = (signal: string) => {
+      if (isShuttingDown) {
+        console.log('[INFO] Force exit requested');
+        process.exit(1);
+      }
+
+      isShuttingDown = true;
       console.log(`[INFO] ${signal} received, shutting down gracefully`);
       
       server.close(() => {
@@ -332,16 +340,6 @@ export class BackupServer {
         console.log('[WARN] Force closing server after timeout');
         process.exit(1);
       }, 5000);
-
-      process.once('SIGINT', () => {
-        console.log('[INFO] Force exit requested');
-        process.exit(1);
-      });
-
-      process.once('SIGTERM', () => {
-        console.log('[INFO] Force exit requested');
-        process.exit(1);
-      });
     };
 
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
