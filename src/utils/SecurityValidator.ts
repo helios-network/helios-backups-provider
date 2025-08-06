@@ -17,7 +17,7 @@ export class SecurityValidator {
     if (!SECURITY_CONFIG.FILENAME_REGEX.test(filename)) {
       return false;
     }
-    
+
     const dangerousChars = ['..', '\\', '/', ':', '*', '?', '"', '<', '>', '|'];
     return !dangerousChars.some(char => filename.includes(char));
   }
@@ -27,6 +27,7 @@ export class SecurityValidator {
     const mimeTypes: { [key: string]: string } = {
       '.gz': 'application/gzip',
       '.tar.gz': 'application/gzip',
+      '.json': 'application/json',
     };
     return mimeTypes[ext] || 'application/octet-stream';
   }

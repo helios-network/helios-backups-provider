@@ -52,6 +52,85 @@ export class BackupServer {
   }
 
   private setupRoutes(): void {
+    this.app.get('/snapshots/:filename.header.json', (req, res) => {
+      try {
+        console.log(`[DEBUG] Header route matched: ${req.originalUrl}`);
+        const fileName = path.basename(req.params.filename);
+        const headerFileName = `${fileName}.header.json`;
+        console.log(`[DEBUG] Extracted filename: ${fileName}`);
+        
+        if (!SecurityValidator.isValidFilename(fileName)) {
+          console.warn(`[SECURITY] Invalid filename attempted: ${fileName} from ${req.ip}`);
+          return res.status(400).json({ 
+            error: 'Invalid filename format.' 
+          });
+        }
+
+        console.log(`[DEBUG] Checking extensions for: ${fileName}`);
+        console.log(`[DEBUG] Allowed extensions: ${SECURITY_CONFIG.ALLOWED_EXTENSIONS}`);
+        const hasValidBackupExtension = SECURITY_CONFIG.ALLOWED_EXTENSIONS.some(ext => {
+          const endsWith = fileName.toLowerCase().endsWith(ext);
+          console.log(`[DEBUG] Checking if ${fileName} ends with ${ext}: ${endsWith}`);
+          return endsWith;
+        });
+        console.log(`[DEBUG] Has valid backup extension: ${hasValidBackupExtension}`);
+        
+        if (!hasValidBackupExtension) {
+          console.warn(`[SECURITY] Invalid backup file extension attempted: ${fileName} from ${req.ip}`);
+          return res.status(400).json({ 
+            error: 'Invalid file type. Only backup files (.gz, .tar.gz) are allowed.' 
+          });
+        }
+
+        const filePath = path.join(this.snapshotDir, fileName);
+        
+        if (!SecurityValidator.isPathSafe(filePath, this.snapshotDir)) {
+          console.warn(`[SECURITY] Path traversal attempt: ${filePath} from ${req.ip}`);
+          return res.status(400).json({ 
+            error: 'Invalid file path' 
+          });
+        }
+
+        if (!fs.existsSync(filePath)) {
+          console.info(`[INFO] File not found: ${fileName} requested by ${req.ip}`);
+          return res.status(404).json({ 
+            error: 'Snapshot not found.' 
+          });
+        }
+
+        const stats = fs.statSync(filePath);
+        const blockId = this.extractBlockId(fileName);
+        const uploadedAt = stats.mtime.toISOString();
+        const description = this.generateDescription(fileName, blockId);
+        const downloadUrl = `http://localhost:${this.port}/snapshots/${fileName}`;
+
+        const headerContent = {
+          filename: fileName,
+          blockId: blockId,
+          uploadedAt: uploadedAt,
+          description: description,
+          downloadUrl: downloadUrl,
+          fileSize: stats.size,
+        };
+
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('X-Frame-Options', 'DENY');
+
+        console.info(`[HEADER] ${headerFileName} requested by ${req.ip}`);
+        res.json(headerContent);
+        return;
+
+      } catch (error) {
+        console.error('[ERROR] Header route error:', error);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Internal server error' });
+        }
+        return;
+      }
+    });
+
     this.app.get('/snapshots/:filename', (req, res) => {
       try {
         const fileName = path.basename(req.params.filename);
@@ -142,6 +221,69 @@ export class BackupServer {
       }
     });
 
+
+
+    this.app.get('/snapshots', (req, res) => {
+      try {
+        if (!fs.existsSync(this.snapshotDir)) {
+          console.info(`[INFO] Backup directory not found: ${this.snapshotDir} requested by ${req.ip}`);
+          return res.json({
+            snapshots: [],
+            totalCount: 0,
+            serverInfo: {
+              name: 'Helios Backups Server',
+              version: '1.0.0',
+              backupDirectory: this.snapshotDir
+            }
+          });
+        }
+
+        const files = fs.readdirSync(this.snapshotDir)
+          .filter(file => SecurityValidator.isValidFileExtension(file))
+          .sort((a, b) => {
+            const blockIdA = this.extractBlockId(a);
+            const blockIdB = this.extractBlockId(b);
+            return blockIdB - blockIdA;
+          });
+
+        const snapshots = files.map(file => {
+          const filePath = path.join(this.snapshotDir, file);
+          const stats = fs.statSync(filePath);
+          const blockId = this.extractBlockId(file);
+          
+          return {
+            filename: file,
+            blockId: blockId,
+            uploadedAt: stats.mtime.toISOString(),
+            description: this.generateDescription(file, blockId),
+            downloadUrl: `http://localhost:${this.port}/snapshots/${file}`,
+            headerUrl: `http://localhost:${this.port}/snapshots/${file}.header.json`,
+            fileSize: stats.size,
+            fileSizeMB: Math.round(stats.size / 1024 / 1024 * 100) / 100
+          };
+        });
+
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('X-Frame-Options', 'DENY');
+
+        console.info(`[LIST] ${snapshots.length} snapshots listed by ${req.ip}`);
+        res.json({
+          snapshots: snapshots,
+          totalCount: snapshots.length,
+        });
+        return;
+
+      } catch (error) {
+        console.error('[ERROR] List route error:', error);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Internal server error' });
+        }
+        return;
+      }
+    });
+
     this.app.get('/health', (req, res) => {
       res.json({ 
         status: 'ok', 
@@ -197,5 +339,20 @@ export class BackupServer {
 
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  }
+
+  private extractBlockId(filename: string): number {
+    const match = filename.match(/snapshot_(\d+)_/);
+    return match ? parseInt(match[1], 10) : 0;
+  }
+
+  private generateDescription(filename: string, blockId: number): string {
+    const dateMatch = filename.match(/(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})/);
+    if (dateMatch) {
+      const date = dateMatch[1];
+      const time = dateMatch[2];
+      return `Helios Node Backup - Block ${blockId} - ${date} ${time}`;
+    }
+    return `Helios Node Backup - Block ${blockId} - ${filename}`;
   }
 }
