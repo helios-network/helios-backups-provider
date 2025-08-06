@@ -259,7 +259,6 @@ export class BackupServer {
             downloadUrl: `http://localhost:${this.port}/snapshots/${file}`,
             headerUrl: `http://localhost:${this.port}/snapshots/${file}.header.json`,
             fileSize: stats.size,
-            fileSizeMB: Math.round(stats.size / 1024 / 1024 * 100) / 100
           };
         });
 
