@@ -1,0 +1,124 @@
+import { BackupServer } from '../services/BackupServer';
+import { DaemonManager } from '../services/DaemonManager';
+
+export class CLI {
+  private args: string[];
+  private command: string;
+  private isDaemon: boolean;
+  private port: number;
+  private maxDownloadRate: number;
+
+  constructor() {
+    this.args = process.argv.slice(2);
+    this.command = this.args[0] || '';
+    this.isDaemon = this.args.includes('-d') || this.args.includes('--daemon');
+    this.port = this.parsePort();
+    this.maxDownloadRate = this.parseDownloadRate();
+  }
+
+  private parsePort(): number {
+    const portIndex = this.args.indexOf('-p') || this.args.indexOf('--port');
+    if (portIndex !== -1 && portIndex + 1 < this.args.length) {
+      const port = parseInt(this.args[portIndex + 1]);
+      if (port > 0 && port <= 65535) {
+        return port;
+      }
+    }
+    return parseInt(process.env.PORT || '3000');
+  }
+
+  private parseDownloadRate(): number {
+    const rateIndex = this.args.indexOf('-r') || this.args.indexOf('--rate');
+    if (rateIndex !== -1 && rateIndex + 1 < this.args.length) {
+      const rate = parseInt(this.args[rateIndex + 1]);
+      if (rate > 0) {
+        return rate * 1024 * 1024;
+      }
+    }
+    return 1024 * 1024;
+  }
+
+  public run(): void {
+    switch (this.command) {
+      case 'serve':
+        this.runServer();
+        break;
+      case 'stop':
+        this.stopDaemon();
+        break;
+      case 'status':
+        this.showStatus();
+        break;
+      case '--help':
+      case '-h':
+      case 'help':
+        this.showHelp();
+        break;
+      default:
+        this.showHelp();
+        process.exit(1);
+    }
+  }
+
+  private runServer(): void {
+    if (this.isDaemon) {
+      console.log('[INFO] Starting server in daemon mode...');
+      DaemonManager.runDaemon();
+    } else {
+      console.log('[INFO] Starting server in foreground mode...');
+      const server = new BackupServer(this.port, this.maxDownloadRate);
+      server.start();
+    }
+  }
+
+  private stopDaemon(): void {
+    console.log('[INFO] Stopping daemon...');
+    DaemonManager.stopDaemon();
+  }
+
+  private showStatus(): void {
+    const pidFile = require('path').join(process.cwd(), 'helios-backups.pid');
+    const fs = require('fs');
+    
+    if (fs.existsSync(pidFile)) {
+      const pid = fs.readFileSync(pidFile, 'utf8').trim();
+      try {
+        process.kill(parseInt(pid), 0);
+        console.log(`[INFO] Daemon is running with PID: ${pid}`);
+      } catch (error) {
+        console.log('[INFO] Daemon is not running');
+        fs.unlinkSync(pidFile);
+      }
+    } else {
+      console.log('[INFO] Daemon is not running');
+    }
+  }
+
+  private showHelp(): void {
+    console.log('Helios Backups Server - Secure Backup File Server');
+    console.log('');
+    console.log('Usage: helios-backups <command> [options]');
+    console.log('');
+    console.log('Commands:');
+    console.log('  serve              Start the backup server');
+    console.log('  stop               Stop the daemon server');
+    console.log('  status             Show daemon status');
+    console.log('  help, --help, -h   Show this help message');
+    console.log('');
+    console.log('Options:');
+    console.log('  -d, --daemon       Run in daemon mode');
+    console.log('  -p, --port <port>  Set server port (default: 3000)');
+    console.log('  -r, --rate <rate>  Set max download rate in MB/s (default: 1)');
+    console.log('');
+    console.log('Examples:');
+    console.log('  helios-backups serve');
+    console.log('  helios-backups serve -d');
+    console.log('  helios-backups serve -p 8080 -r 5');
+    console.log('  helios-backups stop');
+    console.log('  helios-backups status');
+    console.log('');
+    console.log('Environment Variables:');
+    console.log('  PORT               Server port (default: 3000)');
+    console.log('  NODE_ENV           Environment mode (development/production)');
+  }
+}

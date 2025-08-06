@@ -1,0 +1,201 @@
+import express from 'express';
+import fs from 'fs';
+import path from 'path';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import morgan from 'morgan';
+import { Throttle } from 'stream-throttle';
+import { SECURITY_CONFIG } from '../config/security';
+import { BackupPathResolver } from '../utils/BackupPathResolver';
+import { SecurityValidator } from '../utils/SecurityValidator';
+
+export class BackupServer {
+  private app: express.Application;
+  private port: number;
+  private snapshotDir: string;
+  private maxDownloadRate: number;
+
+  constructor(port: number = 3000, maxDownloadRate: number = 1024 * 1024) {
+    this.app = express();
+    this.port = port;
+    this.snapshotDir = BackupPathResolver.getBackupPath();
+    this.maxDownloadRate = maxDownloadRate;
+    this.setupMiddleware();
+    this.setupRoutes();
+  }
+
+  private setupMiddleware(): void {
+    this.app.use(helmet(SECURITY_CONFIG.HELMET_CONFIG));
+    
+    this.app.use(morgan('combined', {
+      skip: (req, res) => res.statusCode < 400,
+      stream: {
+        write: (message: string) => {
+          console.log(`[SECURITY] ${message.trim()}`);
+        }
+      }
+    }));
+
+    const limiter = rateLimit(SECURITY_CONFIG.RATE_LIMIT);
+    this.app.use(limiter);
+
+    this.app.use(express.json({ limit: SECURITY_CONFIG.REQUEST_SIZE_LIMIT }));
+    this.app.use(express.urlencoded({ extended: true, limit: SECURITY_CONFIG.REQUEST_SIZE_LIMIT }));
+
+    this.app.use((req, res, next) => {
+      if (!SecurityValidator.isRequestValid(req)) {
+        console.warn(`[SECURITY] Invalid request from ${req.ip}: ${req.method} ${req.path}`);
+        return res.status(400).json({ error: 'Invalid request' });
+      }
+      return next();
+    });
+  }
+
+  private setupRoutes(): void {
+    this.app.get('/snapshots/:filename', (req, res) => {
+      try {
+        const fileName = path.basename(req.params.filename);
+        
+        if (!SecurityValidator.isValidFilename(fileName)) {
+          console.warn(`[SECURITY] Invalid filename attempted: ${fileName} from ${req.ip}`);
+          return res.status(400).json({ 
+            error: 'Invalid filename format. Only alphanumeric characters, dots, underscores, and hyphens are allowed.' 
+          });
+        }
+
+        if (!SecurityValidator.isValidFileExtension(fileName)) {
+          console.warn(`[SECURITY] Invalid file extension attempted: ${fileName} from ${req.ip}`);
+          return res.status(400).json({ 
+            error: 'Invalid file type. Only backup files (.gz, .tar.gz) are allowed.' 
+          });
+        }
+
+        if (!SecurityValidator.validateMimeType(fileName)) {
+          console.warn(`[SECURITY] Invalid MIME type attempted: ${fileName} from ${req.ip}`);
+          return res.status(400).json({ 
+            error: 'Invalid file type.' 
+          });
+        }
+
+        const filePath = path.join(this.snapshotDir, fileName);
+        
+        if (!SecurityValidator.isPathSafe(filePath, this.snapshotDir)) {
+          console.warn(`[SECURITY] Path traversal attempt: ${filePath} from ${req.ip}`);
+          return res.status(400).json({ 
+            error: 'Invalid file path' 
+          });
+        }
+
+        if (!fs.existsSync(filePath)) {
+          console.info(`[INFO] File not found: ${fileName} requested by ${req.ip}`);
+          return res.status(404).json({ 
+            error: 'Snapshot not found.' 
+          });
+        }
+
+        if (!SecurityValidator.validateFileSize(filePath)) {
+          console.warn(`[SECURITY] File size validation failed: ${fileName} from ${req.ip}`);
+          return res.status(413).json({ 
+            error: 'File too large or invalid' 
+          });
+        }
+
+        const sanitizedFilename = SecurityValidator.sanitizeFilename(fileName);
+        res.setHeader('Content-Disposition', `attachment; filename="${sanitizedFilename}"`);
+        res.setHeader('Content-Type', SecurityValidator.getMimeType(fileName));
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.setHeader('Surrogate-Control', 'no-store');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('X-Frame-Options', 'DENY');
+        res.setHeader('X-XSS-Protection', '1; mode=block');
+        res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+        res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+
+        console.info(`[DOWNLOAD] ${fileName} downloaded by ${req.ip}`);
+
+        const throttle = new Throttle({ rate: this.maxDownloadRate });
+        const fileStream = fs.createReadStream(filePath);
+
+        fileStream.pipe(throttle).pipe(res);
+
+        fileStream.on('error', (err) => {
+          console.error('[ERROR] File read error:', err);
+          if (!res.headersSent) {
+            res.status(500).json({ error: 'Internal server error' });
+          }
+        });
+
+        res.on('error', (err) => {
+          console.error('[ERROR] Response error:', err);
+        });
+
+        return;
+
+      } catch (error) {
+        console.error('[ERROR] Route error:', error);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Internal server error' });
+        }
+        return;
+      }
+    });
+
+    this.app.get('/health', (req, res) => {
+      res.json({ 
+        status: 'ok', 
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        version: '1.0.0',
+        environment: process.env.NODE_ENV || 'development'
+      });
+    });
+
+    this.app.use('*', (req, res) => {
+      console.warn(`[SECURITY] 404 - Route not found: ${req.method} ${req.originalUrl} from ${req.ip}`);
+      res.status(404).json({ error: 'Route not found' });
+    });
+
+    this.app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+      console.error('[ERROR] Unhandled error:', err);
+      res.status(500).json({ error: 'Internal server error' });
+    });
+  }
+
+  public start(): void {
+    const server = this.app.listen(this.port, () => {
+      console.log(`[INFO] Helios Backups server running on http://localhost:${this.port}`);
+      console.log(`[INFO] Serving backups from: ${this.snapshotDir}`);
+      console.log(`[INFO] Max download rate: ${this.maxDownloadRate / 1024 / 1024} MB/s`);
+      console.log(`[INFO] Security: Rate limiting ${SECURITY_CONFIG.RATE_LIMIT.max} requests per minute`);
+    });
+
+    const gracefulShutdown = (signal: string) => {
+      console.log(`[INFO] ${signal} received, shutting down gracefully`);
+      
+      server.close(() => {
+        console.log('[INFO] Server closed, process terminated');
+        process.exit(0);
+      });
+
+      setTimeout(() => {
+        console.log('[WARN] Force closing server after timeout');
+        process.exit(1);
+      }, 5000);
+
+      process.once('SIGINT', () => {
+        console.log('[INFO] Force exit requested');
+        process.exit(1);
+      });
+
+      process.once('SIGTERM', () => {
+        console.log('[INFO] Force exit requested');
+        process.exit(1);
+      });
+    };
+
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  }
+}
