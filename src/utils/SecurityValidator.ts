@@ -53,7 +53,7 @@ export class SecurityValidator {
   static validateFileSize(filePath: string): boolean {
     try {
       const stats = fs.statSync(filePath);
-      return stats.size <= SECURITY_CONFIG.MAX_FILE_SIZE && stats.size > 0;
+      return stats.size > 0;
     } catch (error) {
       return false;
     }

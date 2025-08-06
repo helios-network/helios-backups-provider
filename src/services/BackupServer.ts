@@ -166,9 +166,9 @@ export class BackupServer {
         }
 
         if (!SecurityValidator.validateFileSize(filePath)) {
-          console.warn(`[SECURITY] File size validation failed: ${fileName} from ${req.ip}`);
-          return res.status(413).json({ 
-            error: 'File too large or invalid' 
+          console.warn(`[SECURITY] File validation failed: ${fileName} from ${req.ip}`);
+          return res.status(404).json({ 
+            error: 'File not found or invalid' 
           });
         }
 

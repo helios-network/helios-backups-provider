@@ -1,6 +1,14 @@
 # Helios Backups Server
 
-A secure, high-performance backup server with CLI interface for serving Helios backup files.
+A secure, high-performance backup server with CLI interface for serving Helios backup files and their headers.
+
+## 🎯 What is it?
+
+Helios CDN Server is a lightweight server that:
+- ✅ Serves Helios backup files (.gz, .tar.gz)
+- ✅ Generates JSON headers for each snapshot
+- ✅ Limits download bandwidth
+- ✅ Runs in daemon mode
 
 ## 📦 Installation
 
@@ -22,13 +30,13 @@ chmod +x helios-backups
 # Start the server
 ./helios-backups serve
 
-# Start in daemon mode
+# Start in daemon mode (background)
 ./helios-backups serve -d
 
-# Start on specific port
+# Change port (default: 3000)
 ./helios-backups serve -p 8080
 
-# Limit download speed to 5 MB/s
+# Limit download speed (default: 1 MB/s)
 ./helios-backups serve -r 5
 
 # Stop the daemon
@@ -48,21 +56,62 @@ chmod +x helios-backups
 
 ## 📊 API Endpoints
 
-### Download Backup
+### Download a snapshot
 ```
 GET /snapshots/:filename
 ```
 
-**Parameters:**
-- `filename`: Backup file name (must be .gz or .tar.gz)
+**Example:**
+```bash
+curl http://localhost:3000/snapshots/snapshot_123_2024-01-06_12-30-45.gz
+```
 
-**Security Headers:**
-- `Content-Disposition: attachment`
-- `X-Content-Type-Options: nosniff`
-- `X-Frame-Options: DENY`
-- `Cache-Control: no-store, no-cache`
+### Get snapshot header
+```
+GET /snapshots/:filename.header.json
+```
 
-### Health Check
+**Example:**
+```bash
+curl http://localhost:3000/snapshots/snapshot_123_2024-01-06_12-30-45.gz.header.json
+```
+
+**Response:**
+```json
+{
+  "filename": "snapshot_123_2024-01-06_12-30-45.gz",
+  "blockId": 123,
+  "uploadedAt": "2024-01-06T12:30:45.000Z",
+  "description": "Helios Node Backup - Block 123 - 2024-01-06 12-30-45",
+  "downloadUrl": "http://localhost:3000/snapshots/snapshot_123_2024-01-06_12-30-45.gz",
+  "fileSize": 1048576
+}
+```
+
+### List all snapshots
+```
+GET /snapshots
+```
+
+**Response:**
+```json
+{
+  "snapshots": [
+    {
+      "filename": "snapshot_123_2024-01-06_12-30-45.gz",
+      "blockId": 123,
+      "uploadedAt": "2024-01-06T12:30:45.000Z",
+      "description": "Helios Node Backup - Block 123 - 2024-01-06 12-30-45",
+      "downloadUrl": "http://localhost:3000/snapshots/snapshot_123_2024-01-06_12-30-45.gz",
+      "headerUrl": "http://localhost:3000/snapshots/snapshot_123_2024-01-06_12-30-45.gz.header.json",
+      "fileSize": 1048576
+    }
+  ],
+  "totalCount": 1
+}
+```
+
+### Health check
 ```
 GET /health
 ```
@@ -78,29 +127,29 @@ GET /health
 }
 ```
 
-## 🧪 Testing and Quality
+### Limits
+- **Allowed extensions**: .gz, .tar.gz
+- **File name format**: `snapshot_<blockId>_<date>_<time>.(gz|tar.gz)`
 
-### Run Tests
+## 🧪 Testing
+
 ```bash
+# Unit tests
 npm test
-npm run test:coverage
-```
 
-### Code Verification
-```bash
-npm run lint
-npm run lint:fix
-```
+# Security tests
+npm run security:test
 
-### Security Audit
-```bash
+# Dependency audit
 npm run security:audit
-npm run security:check
+
+# Code verification
+npm run lint
 ```
 
 ## 🚀 Deployment
 
-### Production
+### Simple production
 ```bash
 # Install dependencies
 npm ci --only=production
@@ -111,44 +160,3 @@ npm run build
 # Start in daemon mode
 ./helios-backups serve -d
 ```
-
-### Docker (optional)
-```dockerfile
-FROM node:18-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-COPY . .
-RUN npm run build
-EXPOSE 3000
-CMD ["./helios-backups", "serve"]
-```
-
-## 🔧 Configuration
-
-### Security Limits
-- **Maximum file size**: 1 GB
-- **Allowed extensions**: .gz, .tar.gz
-- **Rate limiting**: 20 requests per minute per IP
-- **Download speed**: 1 MB/s default
-
-### Customization
-Modify `src/config/security.ts` to adjust security parameters.
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Code Standards
-- Use strict TypeScript
-- Add tests for new features
-- Follow ESLint rules
-- Document new APIs
-
-## 🐛 Report Bugs
-
-Please report bugs and feature requests on the [GitHub issues page](https://github.com/helios-network/helios-backups-provider/issues).
