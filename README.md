@@ -36,6 +36,9 @@ chmod +x helios-backups
 # Change port (default: 3000)
 ./helios-backups serve -p 8080
 
+# Set hostname for URLs (default: localhost)
+./helios-backups serve -H example.com
+
 # Limit download speed (default: 1 MB/s)
 ./helios-backups serve -r 5
 
@@ -52,6 +55,7 @@ chmod +x helios-backups
 ### Environment Variables
 
 - `PORT` - Server port (default: 3000)
+- `HOST` - Server hostname for URLs (default: localhost)
 - `NODE_ENV` - Environment mode (development/production)
 
 ## 📊 API Endpoints

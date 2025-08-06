@@ -14,12 +14,14 @@ export class BackupServer {
   private port: number;
   private snapshotDir: string;
   private maxDownloadRate: number;
+  private host: string;
 
-  constructor(port: number = 3000, maxDownloadRate: number = 1024 * 1024) {
+  constructor(port: number = 3000, maxDownloadRate: number = 1024 * 1024, host: string = 'localhost') {
     this.app = express();
     this.port = port;
     this.snapshotDir = BackupPathResolver.getBackupPath();
     this.maxDownloadRate = maxDownloadRate;
+    this.host = host;
     this.setupMiddleware();
     this.setupRoutes();
   }
@@ -95,7 +97,7 @@ export class BackupServer {
         const blockId = this.extractBlockId(fileName);
         const uploadedAt = stats.mtime.toISOString();
         const description = this.generateDescription(fileName, blockId);
-        const downloadUrl = `${req.protocol}://${req.get('host')}/snapshots/${SecurityValidator.sanitizeFilename(fileName)}`;
+        const downloadUrl = this.generateUrl(fileName);
 
         const headerContent = {
           filename: SecurityValidator.sanitizeFilename(fileName),
@@ -249,8 +251,8 @@ export class BackupServer {
             blockId: blockId,
             uploadedAt: stats.mtime.toISOString(),
             description: this.generateDescription(file, blockId),
-            downloadUrl: `${req.protocol}://${req.get('host')}/snapshots/${SecurityValidator.sanitizeFilename(file)}`,
-            headerUrl: `${req.protocol}://${req.get('host')}/snapshots/${SecurityValidator.sanitizeFilename(file)}.header.json`,
+            downloadUrl: this.generateUrl(file),
+            headerUrl: this.generateUrl(file) + '.header.json',
             fileSize: stats.size,
           };
         });
@@ -344,6 +346,12 @@ export class BackupServer {
 
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  }
+
+  private generateUrl(filename: string): string {
+    const protocol = this.host === 'localhost' ? 'http' : 'https';
+    const port = this.host === 'localhost' ? `:${this.port}` : '';
+    return `${protocol}://${this.host}${port}/snapshots/${SecurityValidator.sanitizeFilename(filename)}`;
   }
 
   private extractBlockId(filename: string): number {

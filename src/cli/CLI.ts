@@ -7,6 +7,7 @@ export class CLI {
   private isDaemon: boolean;
   private port: number;
   private maxDownloadRate: number;
+  private host: string;
 
   constructor() {
     this.args = process.argv.slice(2);
@@ -14,6 +15,7 @@ export class CLI {
     this.isDaemon = this.args.includes('-d') || this.args.includes('--daemon');
     this.port = this.parsePort();
     this.maxDownloadRate = this.parseDownloadRate();
+    this.host = this.parseHost();
   }
 
   private parsePort(): number {
@@ -36,6 +38,14 @@ export class CLI {
       }
     }
     return 1024 * 1024;
+  }
+
+  private parseHost(): string {
+    const hostIndex = this.args.indexOf('-H') || this.args.indexOf('--host');
+    if (hostIndex !== -1 && hostIndex + 1 < this.args.length) {
+      return this.args[hostIndex + 1];
+    }
+    return process.env.HOST || 'localhost';
   }
 
   public run(): void {
@@ -66,7 +76,7 @@ export class CLI {
       DaemonManager.runDaemon();
     } else {
       console.log('[INFO] Starting server in foreground mode...');
-      const server = new BackupServer(this.port, this.maxDownloadRate);
+      const server = new BackupServer(this.port, this.maxDownloadRate, this.host);
       server.start();
     }
   }
@@ -109,16 +119,20 @@ export class CLI {
     console.log('  -d, --daemon       Run in daemon mode');
     console.log('  -p, --port <port>  Set server port (default: 3000)');
     console.log('  -r, --rate <rate>  Set max download rate in MB/s (default: 1)');
+    console.log('  -H, --host <host>  Set hostname for URLs (default: localhost)');
     console.log('');
     console.log('Examples:');
     console.log('  helios-backups serve');
     console.log('  helios-backups serve -d');
     console.log('  helios-backups serve -p 8080 -r 5');
+    console.log('  helios-backups serve -H example.com');
+    console.log('  helios-backups serve -H example.com -p 443');
     console.log('  helios-backups stop');
     console.log('  helios-backups status');
     console.log('');
     console.log('Environment Variables:');
     console.log('  PORT               Server port (default: 3000)');
+    console.log('  HOST               Server hostname (default: localhost)');
     console.log('  NODE_ENV           Environment mode (development/production)');
   }
 }
