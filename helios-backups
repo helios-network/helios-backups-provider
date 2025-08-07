@@ -1,0 +1,8 @@
+#!/usr/bin/env node
+
+const path = require('path');
+const { CLI } = require(path.join(__dirname, 'dist', 'index.js'));
+
+// Create CLI instance and run it
+const cli = new CLI();
+cli.run(); 
