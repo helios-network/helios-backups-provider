@@ -4,7 +4,7 @@
   "description": "Helios Backups Server - Secure Backup File Server",
   "main": "dist/index.js",
   "bin": {
-    "helios-backups": "./helios-backups"
+    "helios-backups": "./bin/helios-backups"
   },
   "scripts": {
     "build": "tsc",
@@ -47,7 +47,7 @@
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0"
   },
-  "keywords": ["helios", "backups", "server", "security", "cdn"],
+  "keywords": ["helios", "backups", "server", "security", "cdn", "daemon"],
   "repository": {
     "type": "git",
     "url": "https://github.com/helios-network/helios-backups-provider"
