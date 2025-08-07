@@ -73,7 +73,8 @@ export class CLI {
   private runServer(): void {
     if (this.isDaemon) {
       console.log('[INFO] Starting server in daemon mode...');
-      DaemonManager.runDaemon();
+      console.log(`[INFO] Port: ${this.port}, Rate: ${this.maxDownloadRate / 1024 / 1024} MB/s, Host: ${this.host}`);
+      DaemonManager.runDaemon(this.port, this.maxDownloadRate, this.host);
     } else {
       console.log('[INFO] Starting server in foreground mode...');
       const server = new BackupServer(this.port, this.maxDownloadRate, this.host);
@@ -84,6 +85,7 @@ export class CLI {
   private stopDaemon(): void {
     console.log('[INFO] Stopping daemon...');
     DaemonManager.stopDaemon();
+    process.exit(0);
   }
 
   private showStatus(): void {
@@ -102,6 +104,7 @@ export class CLI {
     } else {
       console.log('[INFO] Daemon is not running');
     }
+    process.exit(0);
   }
 
   private showHelp(): void {
@@ -134,5 +137,6 @@ export class CLI {
     console.log('  PORT               Server port (default: 3000)');
     console.log('  HOST               Server hostname (default: localhost)');
     console.log('  NODE_ENV           Environment mode (development/production)');
+    process.exit(0);
   }
 }

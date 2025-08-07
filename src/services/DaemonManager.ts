@@ -3,9 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 export class DaemonManager {
-  static runDaemon(): void {
-    console.log('[INFO] Starting Helios Backups server in daemon mode...');
-    
+  static runDaemon(port?: number, maxDownloadRate?: number, host?: string): void {    
     try {
       const pidFile = path.join(process.cwd(), 'helios-backups.pid');
       
@@ -19,19 +17,19 @@ export class DaemonManager {
           fs.unlinkSync(pidFile);
         }
       }
-
-      const child = spawn(process.argv[0], process.argv.slice(1), {
+      const daemonPath = path.resolve(process.cwd(), 'dist', 'daemon.js');
+      
+      const child = spawn(process.argv[0], [daemonPath], {
         detached: true,
         stdio: 'ignore',
         env: { 
           ...process.env, 
           NODE_ENV: 'production',
           HELIOS_DAEMON: 'true',
-          NODE_OPTIONS: '--max-old-space-size=512',
-          UV_THREADPOOL_SIZE: '4'
-        },
-        uid: process.getuid ? process.getuid() : undefined,
-        gid: process.getgid ? process.getgid() : undefined
+          PORT: port?.toString() || process.env.PORT || '3000',
+          HOST: host || process.env.HOST || 'localhost',
+          MAX_DOWNLOAD_RATE: maxDownloadRate?.toString() || '1048576'
+        }
       });
       
       child.unref();
@@ -42,20 +40,7 @@ export class DaemonManager {
       
       fs.writeFileSync(pidFile, child.pid.toString());
       
-      setTimeout(() => {
-        try {
-          process.kill(child.pid!, 0);
-          console.log(`[INFO] Daemon started successfully with PID: ${child.pid}`);
-          console.log(`[INFO] PID file: ${pidFile}`);
-          console.log(`[INFO] To stop the daemon: kill ${child.pid} or delete ${pidFile}`);
-        } catch (error) {
-          console.error('[ERROR] Failed to start daemon:', error);
-          if (fs.existsSync(pidFile)) {
-            fs.unlinkSync(pidFile);
-          }
-          process.exit(1);
-        }
-      }, 1000);
+      console.log(`[INFO] Daemon started successfully with PID: ${child.pid}`);
       
       process.exit(0);
     } catch (error) {
@@ -74,6 +59,16 @@ export class DaemonManager {
 
     try {
       const pid = parseInt(fs.readFileSync(pidFile, 'utf8').trim());
+
+      try {
+        process.kill(pid, 0);
+      } catch (error: any) {
+        if (error.code === 'ESRCH') {
+          fs.unlinkSync(pidFile);
+          return;
+        }
+        throw error;
+      }
       process.kill(pid, 'SIGTERM');
       console.log(`[INFO] Sent SIGTERM to daemon PID: ${pid}`);
       
@@ -82,8 +77,12 @@ export class DaemonManager {
           process.kill(pid, 0);
           console.log('[WARN] Daemon still running, sending SIGKILL');
           process.kill(pid, 'SIGKILL');
-        } catch (error) {
-          console.log('[INFO] Daemon stopped successfully');
+        } catch (error: any) {
+          if (error.code === 'ESRCH') {
+            console.log('[INFO] Daemon stopped successfully');
+          } else {
+            console.log('[INFO] Daemon stopped successfully');
+          }
         }
         
         if (fs.existsSync(pidFile)) {
@@ -91,8 +90,13 @@ export class DaemonManager {
         }
       }, 2000);
       
-    } catch (error) {
-      console.error('[ERROR] Error stopping daemon:', error);
+    } catch (error: any) {
+      if (error.code === 'ESRCH') {
+        console.log('[INFO] Daemon process not found, cleaning up PID file');
+      } else {
+        console.error('[ERROR] Error stopping daemon:', error.message);
+      }
+      
       if (fs.existsSync(pidFile)) {
         fs.unlinkSync(pidFile);
       }
