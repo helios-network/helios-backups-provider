@@ -8,6 +8,7 @@ import { Throttle } from 'stream-throttle';
 import { SECURITY_CONFIG } from '../config/security';
 import { BackupPathResolver } from '../utils/BackupPathResolver';
 import { SecurityValidator } from '../utils/SecurityValidator';
+import { SlowLorisProtection } from '../utils/SlowLorisProtection';
 
 export class BackupServer {
   private app: express.Application;
@@ -28,6 +29,7 @@ export class BackupServer {
 
   private setupMiddleware(): void {
     this.app.use(helmet(SECURITY_CONFIG.HELMET_CONFIG));
+    this.app.use(SlowLorisProtection.middleware());
     
     this.app.use(morgan('combined', {
       skip: (req, res) => res.statusCode < 400,
@@ -317,8 +319,11 @@ export class BackupServer {
       console.log(`[INFO] Helios Backups server running on http://localhost:${this.port}`);
       console.log(`[INFO] Serving backups from: ${this.snapshotDir}`);
       console.log(`[INFO] Max download rate: ${this.maxDownloadRate / 1024 / 1024} MB/s`);
-      console.log(`[INFO] Security: Rate limiting ${SECURITY_CONFIG.RATE_LIMIT.max} requests per minute`);
     });
+
+    server.timeout = SECURITY_CONFIG.CONNECTION_TIMEOUT;
+    server.keepAliveTimeout = 65000;
+    server.headersTimeout = 66000;
 
     let isShuttingDown = false;
 
@@ -329,15 +334,14 @@ export class BackupServer {
       }
 
       isShuttingDown = true;
-      console.log(`[INFO] ${signal} received, shutting down gracefully`);
+      
+      SlowLorisProtection.destroy();
       
       server.close(() => {
-        console.log('[INFO] Server closed, process terminated');
         process.exit(0);
       });
 
       setTimeout(() => {
-        console.log('[WARN] Force closing server after timeout');
         process.exit(1);
       }, 5000);
     };
