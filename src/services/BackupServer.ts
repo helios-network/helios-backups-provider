@@ -89,7 +89,6 @@ export class BackupServer {
         }
 
         if (!fs.existsSync(filePath)) {
-          console.info(`[INFO] File not found: ${fileName} requested by ${req.ip}`);
           return res.status(404).json({ 
             error: 'Snapshot not found.' 
           });
@@ -115,7 +114,6 @@ export class BackupServer {
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader('X-Frame-Options', 'DENY');
 
-        console.info(`[HEADER] ${headerFileName} requested by ${req.ip}`);
         res.json(headerContent);
         return;
 
@@ -163,7 +161,6 @@ export class BackupServer {
         }
 
         if (!fs.existsSync(filePath)) {
-          console.info(`[INFO] File not found: ${fileName} requested by ${req.ip}`);
           return res.status(404).json({ 
             error: 'Snapshot not found.' 
           });
@@ -188,8 +185,6 @@ export class BackupServer {
         res.setHeader('X-XSS-Protection', '1; mode=block');
         res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
         res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
-
-        console.info(`[DOWNLOAD] ${fileName} downloaded by ${req.ip}`);
 
         const throttle = new Throttle({ rate: this.maxDownloadRate });
         const fileStream = fs.createReadStream(filePath);
@@ -271,7 +266,6 @@ export class BackupServer {
         res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
         res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
 
-        console.info(`[LIST] ${snapshots.length} snapshots listed by ${req.ip}`);
         res.json({
           snapshots: snapshots,
           totalCount: snapshots.length,
@@ -329,7 +323,6 @@ export class BackupServer {
 
     const gracefulShutdown = (signal: string) => {
       if (isShuttingDown) {
-        console.log('[INFO] Force exit requested');
         process.exit(1);
       }
 
