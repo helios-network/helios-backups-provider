@@ -8,7 +8,7 @@ import { Throttle } from 'stream-throttle';
 import { SECURITY_CONFIG } from '../config/security';
 import { BackupPathResolver } from '../utils/BackupPathResolver';
 import { SecurityValidator } from '../utils/SecurityValidator';
-import { SlowLorisProtection } from '../utils/SlowLorisProtection';
+// import { SlowLorisProtection } from '../utils/SlowLorisProtection';
 
 export class BackupServer {
   private app: express.Application;
@@ -328,7 +328,7 @@ export class BackupServer {
 
       isShuttingDown = true;
       
-      SlowLorisProtection.destroy();
+      // SlowLorisProtection.destroy();
       
       server.close(() => {
         process.exit(0);
