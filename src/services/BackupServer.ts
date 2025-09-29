@@ -29,7 +29,7 @@ export class BackupServer {
 
   private setupMiddleware(): void {
     this.app.use(helmet(SECURITY_CONFIG.HELMET_CONFIG));
-    this.app.use(SlowLorisProtection.middleware());
+    // this.app.use(SlowLorisProtection.middleware());
     
     this.app.use(morgan('combined', {
       skip: (req, res) => res.statusCode < 400,

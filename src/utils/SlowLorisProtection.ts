@@ -26,7 +26,7 @@ export class SlowLorisProtection {
       if (this.isIpBlocked(clientIp)) {
         console.warn(`[SECURITY] Blocked request from ${clientIp} - Slow Loris protection`);
         res.status(429).json({ 
-          error: 'Too many slow connections from this IP',
+          error: `Too many slow connections from this IP (${clientIp})`,
           retryAfter: Math.ceil((this.getBlockTime(clientIp) - Date.now()) / 1000)
         });
         return;
