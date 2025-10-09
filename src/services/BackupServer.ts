@@ -8,7 +8,7 @@ import { Throttle } from 'stream-throttle';
 import { SECURITY_CONFIG } from '../config/security';
 import { BackupPathResolver } from '../utils/BackupPathResolver';
 import { SecurityValidator } from '../utils/SecurityValidator';
-// import { SlowLorisProtection } from '../utils/SlowLorisProtection';
+import { SlowLorisProtection } from '../utils/SlowLorisProtection';
 
 export class BackupServer {
   private app: express.Application;
@@ -29,7 +29,7 @@ export class BackupServer {
 
   private setupMiddleware(): void {
     this.app.use(helmet(SECURITY_CONFIG.HELMET_CONFIG));
-    // this.app.use(SlowLorisProtection.middleware());
+    this.app.use(SlowLorisProtection.middleware());
     
     this.app.use(morgan('combined', {
       skip: (req, res) => res.statusCode < 400,
@@ -40,8 +40,11 @@ export class BackupServer {
       }
     }));
 
-    const limiter = rateLimit(SECURITY_CONFIG.RATE_LIMIT);
-    this.app.use(limiter);
+    const globalLimiter = rateLimit(SECURITY_CONFIG.RATE_LIMIT);
+    this.app.use(globalLimiter);
+
+    const downloadLimiter = rateLimit(SECURITY_CONFIG.DOWNLOAD_RATE_LIMIT);
+    this.app.use('/snapshots/:filename', downloadLimiter);
 
     this.app.use(express.json({ limit: SECURITY_CONFIG.REQUEST_SIZE_LIMIT }));
     this.app.use(express.urlencoded({ extended: true, limit: SECURITY_CONFIG.REQUEST_SIZE_LIMIT }));
@@ -281,16 +284,6 @@ export class BackupServer {
       }
     });
 
-    this.app.get('/health', (req, res) => {
-      res.json({ 
-        status: 'ok', 
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-        version: '1.0.0',
-        environment: process.env.NODE_ENV || 'development'
-      });
-    });
-
     this.app.use('*', (req, res) => {
       console.warn(`[SECURITY] 404 - Route not found: ${req.method} ${req.originalUrl} from ${req.ip}`);
       res.status(404).json({ error: 'Route not found' });
@@ -328,7 +321,7 @@ export class BackupServer {
 
       isShuttingDown = true;
       
-      // SlowLorisProtection.destroy();
+      SlowLorisProtection.destroy();
       
       server.close(() => {
         process.exit(0);
