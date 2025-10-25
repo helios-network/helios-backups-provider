@@ -1,1 +1,1 @@
-./bin/helios-backups serve -p 5050 -H snapshots.helioschainlabs.org -d
+./bin/helios-backups serve -p 5050 -H snapshots.helioschainlabs.org -r 100 -d
