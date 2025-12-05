@@ -190,19 +190,59 @@ export class BackupServer {
         res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
 
         const throttle = new Throttle({ rate: this.maxDownloadRate });
-        const fileStream = fs.createReadStream(filePath);
+        const fileStream = fs.createReadStream(filePath, { autoClose: true });
+        let streamClosed = false;
+
+        const cleanup = () => {
+          if (!streamClosed) {
+            streamClosed = true;
+            if (!fileStream.destroyed) {
+              fileStream.destroy();
+            }
+          }
+        };
 
         fileStream.pipe(throttle).pipe(res);
 
         fileStream.on('error', (err) => {
           console.error('[ERROR] File read error:', err);
+          cleanup();
           if (!res.headersSent) {
             res.status(500).json({ error: 'Internal server error' });
           }
         });
 
+        fileStream.on('close', () => {
+          streamClosed = true;
+        });
+
+        fileStream.on('end', () => {
+        });
+
+        throttle.on('error', (err) => {
+          console.error('[ERROR] Throttle error:', err);
+          cleanup();
+        });
+
         res.on('error', (err) => {
           console.error('[ERROR] Response error:', err);
+          cleanup();
+        });
+
+        res.on('close', () => {
+          if (!res.writableEnded && !res.writableFinished) {
+            cleanup();
+          }
+        });
+
+        req.on('aborted', () => {
+          cleanup();
+        });
+
+        req.on('close', () => {
+          if (!res.writableEnded && !res.writableFinished) {
+            cleanup();
+          }
         });
 
         return;
