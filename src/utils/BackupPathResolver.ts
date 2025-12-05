@@ -5,6 +5,11 @@ import os from 'os';
 export class BackupPathResolver {
   static getBackupPath(): string {
     try {
+      const containerPath = '/root/.heliades/backups';
+      if (fs.existsSync(containerPath)) {
+        return containerPath;
+      }
+      
       const basePwd = fs.existsSync(path.join(os.homedir(), '.helios-cli', 'pwd'))
         ? fs.readFileSync(path.join(os.homedir(), '.helios-cli', 'pwd'), 'utf8').trim()
         : os.homedir();
