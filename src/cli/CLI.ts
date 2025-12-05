@@ -19,7 +19,7 @@ export class CLI {
   }
 
   private parsePort(): number {
-    const portIndex = this.args.indexOf('-p') || this.args.indexOf('--port');
+    const portIndex = this.args.findIndex(arg => arg === '-p' || arg === '--port');
     if (portIndex !== -1 && portIndex + 1 < this.args.length) {
       const port = parseInt(this.args[portIndex + 1]);
       if (port > 0 && port <= 65535) {
@@ -30,7 +30,7 @@ export class CLI {
   }
 
   private parseDownloadRate(): number {
-    const rateIndex = this.args.indexOf('-r') || this.args.indexOf('--rate');
+    const rateIndex = this.args.findIndex(arg => arg === '-r' || arg === '--rate');
     if (rateIndex !== -1 && rateIndex + 1 < this.args.length) {
       const rate = parseInt(this.args[rateIndex + 1]);
       if (rate > 0) {
@@ -41,7 +41,7 @@ export class CLI {
   }
 
   private parseHost(): string {
-    const hostIndex = this.args.indexOf('-H') || this.args.indexOf('--host');
+    const hostIndex = this.args.findIndex(arg => arg === '-H' || arg === '--host');
     if (hostIndex !== -1 && hostIndex + 1 < this.args.length) {
       return this.args[hostIndex + 1];
     }

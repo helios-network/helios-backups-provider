@@ -227,7 +227,7 @@ export class BackupServer {
             totalCount: 0,
             serverInfo: {
               name: 'Helios Backups Server',
-              version: '1.0.0',
+              version: '1.1.0',
               backupDirectory: this.snapshotDir
             }
           });
