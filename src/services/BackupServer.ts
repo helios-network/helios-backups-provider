@@ -64,6 +64,13 @@ export class BackupServer {
         const fileName = path.basename(req.params.filename);
         const headerFileName = `${fileName}.header.json`;
         
+        if (fileName.startsWith('tmp_') && fileName.endsWith('.tar.gz')) {
+          console.warn(`[SECURITY] Temporary archive access denied: ${fileName} from ${req.ip}`);
+          return res.status(404).json({ 
+            error: 'Snapshot not found.' 
+          });
+        }
+        
         if (!SecurityValidator.isValidFilename(fileName)) {
           console.warn(`[SECURITY] Invalid filename attempted: ${fileName} from ${req.ip}`);
           return res.status(400).json({ 
@@ -132,6 +139,13 @@ export class BackupServer {
     this.app.get('/snapshots/:filename', (req, res) => {
       try {
         const fileName = path.basename(req.params.filename);
+        
+        if (fileName.startsWith('tmp_') && fileName.endsWith('.tar.gz')) {
+          console.warn(`[SECURITY] Temporary archive access denied: ${fileName} from ${req.ip}`);
+          return res.status(404).json({ 
+            error: 'Snapshot not found.' 
+          });
+        }
         
         if (!SecurityValidator.isValidFilename(fileName)) {
           console.warn(`[SECURITY] Invalid filename attempted: ${fileName} from ${req.ip}`);
@@ -275,6 +289,7 @@ export class BackupServer {
 
         const files = fs.readdirSync(this.snapshotDir)
           .filter(file => SecurityValidator.isValidFileExtension(file))
+          .filter(file => !(file.startsWith('tmp_') && file.endsWith('.tar.gz')))
           .sort((a, b) => {
             const blockIdA = this.extractBlockId(a);
             const blockIdB = this.extractBlockId(b);
